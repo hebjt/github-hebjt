@@ -1,0 +1,268 @@
+Webuploader 插件。WebUploader是由Baidu WebFE(FEX)团队开发的一个简单的以HTML5为主，FLASH为辅的现代文件上传组件。在现代的浏览器里面能充分发挥HTML5的优势，同时又不摒弃主流IE浏览器，沿用原来的FLASH运行时，兼容IE6+，iOS 6+, android 4+。两套运行时，同样的调用方式，可供用户任意选用。 
+采用大文件分片并发上传，极大的提高了文件上传效率。插件地址 http://fex.baidu.com/webuploader/ 
+这个插件可以自定义CSS样式。
+1、 引入库
+<script type="text/javascript" src="../main/js/webuploader.js"></script>
+<script type="text/javascript" src="../main/js/webuploader.min.js"></script>
+<link href="../main/css/webuploader.css" rel="stylesheet" type="text/css">
+2、引入SWF，SWF不直接引用，在webUploader初始化的时候指定SWF的路径就可以了
+3、上传页面 upload3.html
+<div id="uploader" class="wu-example">
+    <!--用来存放文件信息-->
+    <div id="thelist" class="uploader-list"
+     
+        <div id="attach">
+        <input type="button" value="上传" id="upload"> 
+        </div>
+    </div>
+  </div>
+ 
+ 
+ <!--多文件上传 -->
+<div id="uploader1" class="wu-example">
+    <!--用来存放文件信息-->
+    <div id="thelist1" class="uploader-list">
+     
+        <div id="multi"><code class=" hljs xml">
+        <input type="button" value="上传" id="multiUpload"> 
+     
+        </div>
+    </div>
+  </div>
+  
+  4、upload.js
+  包含单文件上传，多文件上传，和webuploader多实例
+
+
+/*********************************WebUpload 单文件上传 begin*****************************************/
+$(function(){
+    var $list = $("#thelist");
+    var  uploader ;// 实例化   
+    uploader = WebUploader.create({ 
+           auto:false, //是否自动上传
+            pick: {
+                id: '#attach',
+                name:"file",  //这个地方 name 没什么用，虽然打开调试器，input的名字确实改过来了。但是提交到后台取不到文件。如果想自定义file的name属性，还是要和fileVal 配合使用。
+                label: '点击选择图片',
+                multiple:false            //默认为true，就是可以多选
+            },
+            swf: '../../main/js/Uploader.swf',  
+            //fileVal:'multiFile',  //自定义file的name属性，我用的版本是0.1.5 ,打开客户端调试器发现生成的input 的name 没改过来。
+                                             //名字还是默认的file,但不是没用哦。虽然客户端名字没改变，但是提交到到后台，是要用multiFile 这个对象来取文件的，用file 是取不到文件的
+                                             // 建议作者有时间把这个地方改改啊，搞死人了。。
+            server: "ContentsDetail!ajaxAttachUpload.action",  
+            duplicate:true,//是否可重复选择同一文件
+            resize: false,
+            formData: {
+                "status":"file",
+                "contentsDto.contentsId":"0000004730",
+                "uploadNum":"0000004730",
+                "existFlg":'false'
+            },  
+            compress: null,//图片不压缩
+            chunked: true,  //分片处理
+            chunkSize: 5 * 1024 * 1024, //每片5M  
+            chunkRetry:false,//如果失败，则不重试
+            threads:1,//上传并发数。允许同时最大上传进程数。
+            // runtimeOrder: 'flash',  
+            // 禁掉全局的拖拽功能。这样不会出现图片拖进页面的时候，把图片打开。  
+            disableGlobalDnd: true
+        });  
+ 
+        // 当有文件添加进来的时候
+       uploader.on( "fileQueued", function( file ) {
+           console.log("fileQueued:");
+           $list.append( "<div id=""+  file.id + "" class="item">" +
+               "<h4 class="info">" + file.name + "</h4>" +
+               "<p class="state">等待上传...</p>" +
+           "" );
+       });
+ 
+       //当所有文件上传结束时触发
+       uploader.on("uploadFinished",function(){
+           console.log("uploadFinished:");
+       })
+ 
+        //当某个文件上传到服务端响应后，会派送此事件来询问服务端响应是否有效。
+        uploader.on("uploadAccept",function(object,ret){
+            //服务器响应了
+            //ret._raw  类似于 data
+            var data =JSON.parse(ret._raw);
+            if(data.resultCode != "1" && data.resultCode != "3"){
+                if(data.resultCode == "9"){
+                    uploader.reset();
+                    alert("error");
+                    return false;
+                }
+            }else{
+                //E05017
+                uploader.reset();
+                alert("error");
+                return false;
+            }
+           })
+ 
+       //当文件上传成功时触发。
+         uploader.on( "uploadSuccess", function( file ) {
+           $( "#"+file.id ).find("p.state").text("已上传");
+       });
+ 
+       uploader.on( "uploadError", function( file ) {
+           $( "#"+file.id ).find("p.state").text("上传出错");
+           uploader.cancelFile(file);
+           uploader.removeFile(file,true);
+           uploader.reset();
+       });
+ 
+ 
+       $("#upload").on("click", function() {
+           uploader.upload();
+       })
+ 
+});
+/*********************************WebUpload 单文件上传 end*******************************************/
+ 
+/*********************************WebUpload 多文件上传 begin*****************************************/
+$(function(){
+    var $list = $("#thelist1");
+    var fileSize = 0;  //总文件大小
+    var fileName = []; //文件名列表
+    var fileSizeOneByOne =[];//每个文件大小
+    var  uploader ;// 实例化   
+    uploader = WebUploader.create({ 
+            auto:false, //是否自动上传
+            pick: {
+                id: '#multi',
+                label: '点击选择文件',
+                name:"multiFile"
+            },
+            swf: '../../main/js/Uploader.swf',  
+            server: "ContentsDetail!multiUpload.action",  
+            duplicate:true, //同一文件是否可重复选择
+            resize: false,
+            formData: {
+                "status":"multi",
+                "contentsDto.contentsId":"0000004730",
+                "uploadNum":"0000004730",
+                "existFlg":'false'
+            },  
+            compress: null,//图片不压缩
+            chunked: true,  //分片
+            chunkSize: 5 * 1024 * 1024,   //每片5M
+            chunkRetry:false,//如果失败，则不重试
+            threads:1,//上传并发数。允许同时最大上传进程数。
+            //fileNumLimit:50,//验证文件总数量, 超出则不允许加入队列
+            // runtimeOrder: 'flash',  
+            // 禁掉全局的拖拽功能。这样不会出现图片拖进页面的时候，把图片打开。  
+            disableGlobalDnd: true
+        });  
+ 
+       // 当有文件添加进来的时候
+       uploader.on( "fileQueued", function( file ) {
+           console.log("fileQueued:");
+           $list.append( "<div id=""+  file.id + "" class="item">" +
+               "<h4 class="info">" + file.name + "</h4>" +
+               "<p class="state">等待上传...</p>" +
+           "" );
+       });
+ 
+       // 当开始上传流程时触发
+       uploader.on( "startUpload", function() {
+           console.log("startUpload");
+           //添加额外的表单参数
+           $.extend( true, uploader.options.formData, {"fileSize":fileSize,"multiFileName":fileName.join(","),"fileSizeOneByOne":fileSizeOneByOne.join(",")}); 
+       });
+ 
+ 
+       //当某个文件上传到服务端响应后，会派送此事件来询问服务端响应是否有效。
+       uploader.on("uploadAccept",function(object,ret){
+            //服务器响应了
+            //ret._raw  类似于 data
+            console.log("uploadAccept");
+            console.log(ret);
+            var data =JSON.parse(ret._raw);
+            if(data.resultCode!="1" && data.resultCode !="3"){
+                if(data.resultCode == "9"){
+                    alert("error");
+                    uploader.reset();
+                    return;
+                }
+            }else{
+                uploader.reset();
+                alert("error");
+            }
+        })
+ 
+       uploader.on( "uploadSuccess", function( file ) {
+           $( "#"+file.id ).find("p.state").text("已上传");
+       });
+ 
+       uploader.on( "uploadError", function( file,reason  ) {
+           $( "#"+file.id ).find("p.state").text("上传出错");
+           console.log("uploadError");
+           console.log(file);
+           console.log(reason);
+           //多个文件
+           var fileArray = uploader.getFiles();
+           for(var i = 0 ;i<filearray.length;i++){ uploader.cancelfile(filearray[i]);="" uploader.removefile(filearray[i],true);="" }="" uploader.reset();="" filesize="0;" filename="[];" filesizeonebyone="[];" });="" 当validate不通过时，会以派送错误事件的形式通知调用者="" uploader.on("error",function(){="" console.log("error");="" alert("error");="" })="" 如果是在模态框里的上传按钮，点击file的时候不会触发控件="" 修复model内部点击不会触发选择文件的bug="" *="" $("#multi="" .webuploader-pick").click(function="" ()="" {="" :file").click();="" 关键代码="" });*="" 选择文件之后执行上传="" $(document).on("change","input[name="multiFile" ]",="" function()="" var="" filearray1="uploader.getFiles();" for(var="" i="0" ;i<filearray1.length;i++){="" 后台用="" +="fileArray1[i].size;" filesizeonebyone.push(filearray1[i].size);="" filename.push(filearray1[i].name);="" console.log(filesize);="" console.log(filesizeonebyone);="" console.log(filename);="" **="" 多文件上传="" $("input[name="multiUpload" ]").on("click",function(){="" uploader.upload();="" *********************************webupload="" end*****************************************="" ************************************webuploader的自带参数提交到后台的参数列表*************************="" web="" uploader="" 的自带参数="" lastmodifieddate="[Wed" apr="" 27="" 2016="" 16:45:01="" gmt+0800="" (中国标准时间)],="" chunks="[3]," chunk="[0]," type="[audio/wav]," uid="[yangl]," id="[WU_FILE_0]," size="[268620636]," name="[3.wav]," formdata的参数="" contentsdto.contentsid="[0000004730]," existflg="[false]," status="[file]," uploadnum="[0000004730]" *********************************************************************************************="" <="" code=""></filearray.length;i++){></div></div></code>
+
+4、ContentsDetail.action  后台java代码 
+public void ajaxAttachUpload() {
+        String path =  "d:\\test\\"+fileFileName;
+        try {
+            File file = this.getFile();
+            FileUtil.randomAccessFile(path, file);
+            //如果文件小与5M的话，分片参数chunk的值是null
+            if(StringUtils.isEmpty(chunk)){
+                outJson("0", "success", "");
+            }else{
+            //chunk 分片索引，下标从0开始
+            //chunks 总分片数
+                if (Integer.valueOf(chunk) == (Integer.valueOf(chunks) - 1)) {
+                    outJson("0", "上传成功", "");
+                } else {
+                    outJson("2", "上传中" + fileFileName + " chunk:" + chunk, "");
+                }
+            }
+        } catch (Exception e) {
+            outJson("3", "上传失败", "");
+        }
+    }
+ 
+FileUtil.java
+ 
+/**
+     * 指定位置开始写入文件
+     * @param tempFile  输入文件
+     * @param outPath  输出文件的路径(路径+文件名)
+     * @throws IOException
+     */
+    public static void randomAccessFile( String outPath,File tempFile) throws IOException{
+        RandomAccessFile  raFile = null;
+        BufferedInputStream inputStream=null;
+        try{
+            File dirFile = new File(outPath);
+            //以读写的方式打开目标文件
+            raFile = new RandomAccessFile(dirFile, "rw"); 
+            raFile.seek(raFile.length());
+            inputStream = new BufferedInputStream(new FileInputStream(tempFile));
+            byte[] buf = new byte[1024];
+            int length = 0;
+            while ((length = inputStream.read(buf)) != -1) {
+                raFile.write(buf, 0, length);
+            }
+        }catch(Exception e){
+            throw new IOException(e.getMessage());
+        }finally{
+            try {
+                if (inputStream != null) {
+                    inputStream.close();
+                }
+                if (raFile != null) {
+                    raFile.close();
+                }
+            }catch(Exception e){
+                throw new IOException(e.getMessage());
+            }
+        }
+    }
